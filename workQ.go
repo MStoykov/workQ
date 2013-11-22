@@ -7,6 +7,7 @@ import "sync"
 // but return them in FIFO order after Work() has finished
 //
 // TODO: make it more natural to get things out
+// look at the test for basic implementation of a typed wrapper
 type WorkQ struct {
 	in  chan Item
 	out chan Item
