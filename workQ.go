@@ -11,6 +11,7 @@ import "sync"
 type WorkQ struct {
 	in  chan Worker
 	out chan Worker
+	wg  sync.WaitGroup
 }
 
 // the interface that needs to be implemented
@@ -26,38 +27,40 @@ func NewWorkQ() WorkQ {
 		out: make(chan Worker),
 	}
 
-	queue.startLoop()
+	go queue.loop()
 	return queue
 }
 
-func (w *WorkQ) startLoop() {
+// call Worker.Work, return the Worker after both the Work has finished and waitFor has been closed
+// and close the return channel after all that.
+func (w *WorkQ) doWork(waitFor <-chan struct{}, worker Worker) chan struct{} {
+	nextWaitFor := make(chan struct{})
 	go func() {
-		// signal that the queue is no longer usable
-		defer close(w.out)
-		//waiting group for the defer above
-		wg := sync.WaitGroup{}
-		// channel we wait to close before we can return the worker
-		waitFor := make(chan struct{})
-		// the first element can be returned immediately
-		close(waitFor)
-		// get next worker
-		for worker := range w.in {
-			wg.Add(1)
-			// the channel that we will give to the next to wait for and will close when we have returned
-			nextWaitFor := make(chan struct{})
-			go func(waitFor <-chan struct{}, nextWaitFor chan struct{}, worker Worker) {
-				// in case ... something
-				defer wg.Done()
-				worker.Work()
-				<-waitFor
-				w.out <- worker
-				close(nextWaitFor)
-			}(waitFor, nextWaitFor, worker)
-			// swap for the next
-			waitFor = nextWaitFor
-		}
-		wg.Wait()
+		// in defer in case Work panics
+		defer w.wg.Done()
+		defer close(nextWaitFor)
+		worker.Work()
+		<-waitFor
+		w.out <- worker
 	}()
+	return nextWaitFor
+}
+
+func (w *WorkQ) loop() {
+	// signal that the queue is no longer usable
+	defer close(w.out)
+	// channel we wait to close before we can return the worker
+	waitFor := make(chan struct{})
+	// the first element can be returned immediately
+	close(waitFor)
+	// get next worker
+	for worker := range w.in {
+		w.wg.Add(1)
+		// the channel that we will give to the next to wait for and will close when we have returned
+		waitFor = w.doWork(waitFor, worker)
+	}
+	// wait for the not yet returned items
+	w.wg.Wait()
 }
 
 // you write on this channel.
