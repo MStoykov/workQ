@@ -6,87 +6,87 @@ import (
 	"time"
 )
 
-type basicItemQueue struct {
+type basicWorkerQueue struct {
 	queue WorkQ
-	in    chan basicItem
-	out   chan basicItem
+	in    chan basicWorker
+	out   chan basicWorker
 }
 
-func newBasicItemQueue() basicItemQueue {
+func newBasicWorkerQueue() basicWorkerQueue {
 	queue := NewWorkQ()
-	in := make(chan basicItem)
+	in := make(chan basicWorker)
 	go func() {
 		wrappedIn := queue.In()
 		defer close(wrappedIn)
-		for item := range in {
-			wrappedIn <- item
+		for worker := range in {
+			wrappedIn <- worker
 		}
 	}()
-	out := make(chan basicItem)
+	out := make(chan basicWorker)
 	go func() {
 		wrappedOut := queue.Out()
 		defer close(out)
-		for item := range wrappedOut {
-			basicItem, ok := item.(basicItem)
+		for worker := range wrappedOut {
+			basicWorker, ok := worker.(basicWorker)
 			if !ok {
 				panic("WAT!?!?!")
 			}
-			out <- basicItem
+			out <- basicWorker
 		}
 	}()
-	return basicItemQueue{
+	return basicWorkerQueue{
 		queue: queue,
 		in:    in,
 		out:   out,
 	}
 }
 
-func (b *basicItemQueue) Out() <-chan basicItem {
+func (b *basicWorkerQueue) Out() <-chan basicWorker {
 	return b.out
 }
 
-func (b *basicItemQueue) In() chan<- basicItem {
+func (b *basicWorkerQueue) In() chan<- basicWorker {
 	return b.in
 }
 
-type basicItem struct {
+type basicWorker struct {
 	Number int
 }
 
-func (b basicItem) Work() {
+func (b basicWorker) Work() {
 	time.Sleep(time.Millisecond * time.Duration(b.Number%50))
 }
 
 func _TestBasicUsage(t *testing.T) {
 	queue := NewWorkQ()
 	in := queue.In()
-	basicItem := basicItem{1}
-	in <- basicItem
-	item := <-queue.Out()
-	if item == nil || item != basicItem {
+	basicWorker := basicWorker{1}
+	in <- basicWorker
+	worker := <-queue.Out()
+	if worker == nil || worker != basicWorker {
 		t.Fatal("Couldn't get a single element through")
 	}
 }
 
-func TestBasic50kItems(t *testing.T) {
+func TestBasic50kWorkers(t *testing.T) {
 	queue := NewWorkQ()
 	in := queue.In()
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
 		for i := 1; i < 50000; i++ {
-			basicItem := basicItem{i}
-			in <- basicItem
+			basicWorker := basicWorker{i}
+			in <- basicWorker
 		}
 		close(in)
 		wg.Done()
 	}()
 	go func() {
 		i := 1
-		for item := range queue.Out() {
-			basicItem, ok := item.(basicItem)
-			if !ok || basicItem.Number != i {
-				t.Errorf("something went wrong for i: %d and item: %v", i, basicItem)
+		for worker := range queue.Out() {
+			basicWorker, ok := worker.(basicWorker)
+			if !ok || basicWorker.Number != i {
+				t.Errorf("something went wrong for i: %d and worker: %v", i, basicWorker)
 			}
 			i++
 		}
@@ -95,24 +95,24 @@ func TestBasic50kItems(t *testing.T) {
 	wg.Wait()
 }
 
-func TestBasicItemQueueWrapper50K(t *testing.T) {
-	queue := newBasicItemQueue()
+func TestBasicWorkerQueueWrapper50K(t *testing.T) {
+	queue := newBasicWorkerQueue()
 	in := queue.In()
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
 		for i := 1; i < 50000; i++ {
-			basicItem := basicItem{i}
-			in <- basicItem
+			basicWorker := basicWorker{i}
+			in <- basicWorker
 		}
 		close(in)
 		wg.Done()
 	}()
 	go func() {
 		i := 1
-		for item := range queue.Out() {
-			if item.Number != i {
-				t.Errorf("something went wrong for i: %d and item: %v", i, item)
+		for worker := range queue.Out() {
+			if worker.Number != i {
+				t.Errorf("something went wrong for i: %d and worker: %v", i, worker)
 			}
 			i++
 		}
