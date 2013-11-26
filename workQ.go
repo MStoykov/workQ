@@ -34,13 +34,13 @@ func (w *WorkQ) startLoop() {
 	go func() {
 		defer close(w.out)
 		wg := sync.WaitGroup{}
-		nextCanReturn := make(chan bool)
+		nextCanReturn := make(chan struct{})
 		close(nextCanReturn)
 		for worker := range w.in {
 			canReturn := nextCanReturn
-			nextCanReturn = make(chan bool)
+			nextCanReturn = make(chan struct{})
 			wg.Add(1)
-			go func(canReturn <-chan bool, nextCanReturn chan bool, worker Worker) {
+			go func(canReturn <-chan struct{}, nextCanReturn chan struct{}, worker Worker) {
 				defer wg.Done()
 				item.Work()
 				<-canReturn
