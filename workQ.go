@@ -32,21 +32,29 @@ func NewWorkQ() WorkQ {
 
 func (w *WorkQ) startLoop() {
 	go func() {
+		// signal that the queue is no longer usable
 		defer close(w.out)
+		//waiting group for the defer above
 		wg := sync.WaitGroup{}
-		nextCanReturn := make(chan struct{})
-		close(nextCanReturn)
+		// channel we wait to close before we can return the worker
+		waitFor := make(chan struct{})
+		// the first element can be returned immediately
+		close(waitFor)
+		// get next worker
 		for worker := range w.in {
-			canReturn := nextCanReturn
-			nextCanReturn = make(chan struct{})
 			wg.Add(1)
-			go func(canReturn <-chan struct{}, nextCanReturn chan struct{}, worker Worker) {
+			// the channel that we will give to the next to wait for and will close when we have returned
+			nextWaitFor := make(chan struct{})
+			go func(waitFor <-chan struct{}, nextWaitFor chan struct{}, worker Worker) {
+				// in case ... something
 				defer wg.Done()
-				item.Work()
-				<-canReturn
+				worker.Work()
+				<-waitFor
 				w.out <- worker
-				close(nextCanReturn)
-			}(canReturn, nextCanReturn, worker)
+				close(nextWaitFor)
+			}(waitFor, nextWaitFor, worker)
+			// swap for the next
+			waitFor = nextWaitFor
 		}
 		wg.Wait()
 	}()
