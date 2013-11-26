@@ -19,22 +19,6 @@ type Item interface {
 	Work()
 }
 
-type itemWrapper struct {
-	item Item
-}
-
-func (b itemWrapper) start(start <-chan bool) <-chan bool {
-	cl := make(chan bool)
-	go func() {
-		defer close(cl)
-		b.item.Work()
-		select {
-		case <-start:
-		}
-	}()
-	return cl
-}
-
 // get a new WorkQ
 func NewWorkQ() WorkQ {
 	queue := WorkQ{
@@ -53,11 +37,12 @@ func (w *WorkQ) startLoop() {
 		nextCanReturn := make(chan bool)
 		close(nextCanReturn)
 		for item := range w.in {
-			canReturn := itemWrapper{item}.start(nextCanReturn)
+			canReturn := nextCanReturn
 			nextCanReturn = make(chan bool)
 			wg.Add(1)
 			go func(canReturn <-chan bool, nextCanReturn chan bool, item Item) {
 				defer wg.Done()
+				item.Work()
 				<-canReturn
 				w.out <- item
 				close(nextCanReturn)
